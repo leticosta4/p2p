@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f4f6">
+  <title>Simulador Pastry — Sistemas Distribuídos</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ccircle cx='20' cy='20' r='15' fill='none' stroke='%232f6095' stroke-width='4'/%3E%3Ccircle cx='20' cy='5' r='5' fill='%232f6095'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+  <header class="page-header">
+    <div>
+      <p class="subject">Sistemas Distribuídos</p>
+      <h1>Simulador de roteamento Pastry</h1>
+      <p>Veja como uma mensagem encontra o nó responsável por uma chave.</p>
+    </div>
+    <button id="open-tutorial" class="button" type="button" aria-haspopup="dialog">Como usar? <span aria-hidden="true">?</span></button>
+  </header>
+
+  <main>
+    <div id="error" class="error" role="alert" hidden></div>
+    <div class="workspace">
+      <aside class="controls" aria-label="Configuração da simulação">
+        <section class="panel" aria-labelledby="network-title">
+          <h2 id="network-title">1. Crie a rede</h2>
+          <form id="network-form">
+            <fieldset data-network-control>
+              <div class="count-field">
+                <label for="node-count-number">Quantidade de nós</label>
+                <input id="node-count-number" type="number" min="1" max="1000" value="32" required>
+              </div>
+              <input id="node-count" type="range" min="1" max="1000" value="32" aria-label="Quantidade de nós">
+              <p class="help">Cada nó representa um computador participante. Comece com poucos para enxergar melhor.</p>
+              <details class="advanced">
+                <summary>Configurações avançadas</summary>
+                <label for="base">Base dos dígitos</label>
+                <select id="base"><option value="2">2 (binária)</option><option value="4">4 (quaternária)</option><option value="16" selected>16 (hexadecimal)</option></select>
+                <p class="help">Muda como os prefixos são comparados.</p>
+                <label for="leaf-size">Vizinhos de cada lado (Leaf Set)</label>
+                <select id="leaf-size"><option value="2">2 vizinhos</option><option value="4">4 vizinhos</option></select>
+                <label for="seed">Semente da rede</label>
+                <input id="seed" type="number" min="0" max="4294967295" value="42" required>
+                <p class="help">A mesma semente repete os mesmos nós. Altere o valor para gerar outros IDs.</p>
+              </details>
+              <button type="submit" class="button full">Criar rede</button>
+              <p id="network-feedback" class="help" aria-live="polite">Uma rede de exemplo será criada ao abrir a página.</p>
+            </fieldset>
+          </form>
+        </section>
+
+        <section class="panel" aria-labelledby="search-title">
+          <h2 id="search-title">2. Escolha a busca</h2>
+          <form id="route-form">
+            <fieldset data-network-control>
+              <label for="source">Nó de origem</label>
+              <select id="source"></select>
+              <p class="help">É de onde a mensagem sai. Você também pode clicar em um nó do anel.</p>
+              <label for="key">Chave procurada</label>
+              <div class="key-field">
+                <input id="key" value="A73F" maxlength="6" placeholder="Ex.: A73F" spellcheck="false" autocapitalize="characters" aria-describedby="key-help">
+                <button id="random-key" type="button" class="button">Sortear</button>
+              </div>
+              <p id="key-help" class="help">Use de 0000 a FFFF: números de 0 a 9 e letras de A a F.</p>
+              <button type="submit" class="button primary full">Buscar chave</button>
+              <p id="search-feedback" class="help" aria-live="polite">Depois, acompanhe os saltos na área da rede.</p>
+            </fieldset>
+          </form>
+        </section>
+        <p class="sidebar-note">A chave representa o identificador de um dado. Nesta simulação, procuramos quem seria responsável por ele.</p>
+      </aside>
+
+      <div class="results">
+        <section class="panel network-panel" aria-labelledby="ring-title">
+          <div class="section-heading">
+            <h2 id="ring-title">3. Acompanhe o caminho</h2>
+            <span id="network-label" class="network-label">Preparando rede…</span>
+          </div>
+          <div class="ring-wrap">
+            <svg id="ring" viewBox="0 0 620 580" role="group" aria-label="Nós da rede e caminho da mensagem"></svg>
+            <div class="ring-center" aria-hidden="true"><span>IDs no anel</span><strong>0000 a FFFF</strong><span id="ring-caption">32 nós · base 16</span></div>
+          </div>
+          <div class="legend" aria-label="Legenda do anel">
+            <span><i class="dot node-dot"></i>Nó</span><span><i class="dot source-dot"></i>Origem</span>
+            <span><i class="dot key-dot"></i>Chave</span><span><i class="dot target-dot"></i>Responsável</span>
+          </div>
+          <dl class="route-summary">
+            <div><dt>Chave</dt><dd id="key-stat">—</dd></div>
+            <div><dt>Responsável</dt><dd id="target-stat">—</dd></div>
+            <div><dt>Total de saltos</dt><dd id="hops-stat">—</dd></div>
+            <div><dt>Salto exibido</dt><dd id="progress-stat">0 de 0</dd></div>
+          </dl>
+          <fieldset data-network-control class="playback">
+            <button id="back-step" type="button" class="button">← Anterior</button>
+            <button id="step" type="button" class="button">Próximo salto →</button>
+            <button id="play" type="button" class="button primary">Animar busca</button>
+            <button id="restart" type="button" class="button plain">Voltar ao início</button>
+          </fieldset>
+          <p id="route-status" class="route-status" aria-live="polite">Preparando a simulação…</p>
+          <p id="hop-explanation" class="hop-explanation"></p>
+        </section>
+
+        <section class="panel path-panel" aria-labelledby="path-title">
+          <div class="section-heading"><h2 id="path-title">Caminho da mensagem</h2><span id="path-base" class="network-label">base 16</span></div>
+          <p class="help">Os dígitos em <strong>negrito</strong> coincidem com o início da chave <code id="path-key">—</code>. A linha marcada é o salto exibido no anel.</p>
+          <div class="table-scroll">
+            <table class="path-table">
+              <thead><tr><th scope="col">Salto</th><th scope="col">ID do nó</th><th scope="col">Dígitos iguais</th><th scope="col">Como chegou</th></tr></thead>
+              <tbody id="path-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <section class="additional" aria-labelledby="additional-title">
+      <h2 id="additional-title">Para explorar mais</h2>
+      <details class="panel inspector">
+        <summary>Ver os vizinhos e a tabela do nó de origem</summary>
+        <div class="details-content">
+          <p>O <strong>Leaf Set</strong> guarda os vizinhos próximos no anel. A <strong>tabela de roteamento</strong> guarda contatos organizados pelo início de seus IDs.</p>
+          <p id="leaf-detail"></p>
+          <div class="table-scroll"><table id="routing-table"></table></div>
+          <p class="help">Linha: quantidade de dígitos de prefixo. Coluna: próximo dígito. Os IDs das células estão em hexadecimal. — indica uma entrada vazia ou a coluna do próprio prefixo.</p>
+        </div>
+      </details>
+      <details class="panel churn-panel">
+        <summary>Testar a saída de nós da rede</summary>
+        <div class="details-content">
+          <p>Remova alguns participantes e veja se o responsável pela mesma chave muda.</p>
+          <fieldset data-network-control class="churn-controls">
+            <label for="churn-percent">Quantidade a remover</label>
+            <select id="churn-percent"><option value="10">10% dos nós</option><option value="20" selected>20% dos nós</option><option value="40">40% dos nós</option></select>
+            <button id="churn" type="button" class="button">Remover nós e buscar novamente</button>
+          </fieldset>
+          <p class="help">Aqui as tabelas são reconstruídas após a remoção. A simulação não representa a detecção de falhas em tempo real.</p>
+          <p id="churn-status" class="churn-status" aria-live="polite"></p>
+        </div>
+      </details>
+    </section>
+    <footer>Simulação didática de Pastry · As tabelas são montadas com conhecimento de toda a rede; a entrada de novos nós não é simulada.</footer>
+  </main>
+
+  <dialog id="tutorial" aria-labelledby="tutorial-title">
+    <div class="tutorial-header">
+      <h2 id="tutorial-title">Como usar o simulador</h2>
+      <form method="dialog"><button class="button plain" aria-label="Fechar tutorial">Fechar ×</button></form>
+    </div>
+    <div class="tutorial-progress"><span id="tutorial-counter">Etapa 1 de 7</span><progress id="tutorial-progress" max="7" value="1" aria-label="Progresso do tutorial"></progress></div>
+    <div id="tutorial-content" class="tutorial-content">
+      <section class="tutorial-page">
+        <h3 tabindex="-1">O que estamos simulando?</h3>
+        <p>Em uma rede <strong>peer-to-peer (P2P)</strong>, vários computadores participam da rede. Cada um é chamado de <strong>nó</strong>.</p>
+        <p>O Pastry ajuda uma mensagem a encontrar o nó responsável por uma <strong>chave</strong>, que pode representar um dado que queremos localizar.</p>
+        <div class="tutorial-example"><span>Origem</span><span aria-hidden="true">→</span><span>Nós intermediários</span><span aria-hidden="true">→</span><span>Responsável</span></div>
+        <p class="lesson"><strong>O que observar:</strong> a mensagem passa de nó em nó. Cada nó usa seus contatos locais para decidir o próximo salto.</p>
+      </section>
+      <section class="tutorial-page" hidden>
+        <h3 tabindex="-1">Por que os nós ficam em um anel?</h3>
+        <p>Cada nó tem um identificador (ID). Aqui ele aparece em hexadecimal, de <code>0000</code> até <code>FFFF</code>. Os pontos são posicionados na ordem desses IDs.</p>
+        <div class="tutorial-example circular-example"><code>FFFE</code><span>→</span><code>FFFF</code><span>→</span><code>0000</code><span>→</span><code>0001</code></div>
+        <p>Depois de <code>FFFF</code>, voltamos a <code>0000</code>. Por isso, esses dois valores são vizinhos, apesar de parecerem distantes na escrita.</p>
+        <p class="lesson"><strong>O que aprender:</strong> o responsável é o nó mais próximo da chave pela <strong>distância circular</strong>. O losango laranja marca a chave; o nó verde é o responsável.</p>
+      </section>
+      <section class="tutorial-page" hidden>
+        <h3 tabindex="-1">1. Crie uma rede</h3>
+        <p>Escolha a <strong>quantidade de nós</strong> e clique em <strong>Criar rede</strong>. A página já começa com 32 nós, então você pode experimentar sem configurar nada.</p>
+        <p>Em <strong>Configurações avançadas</strong>, você pode alterar:</p>
+        <ul>
+          <li><strong>Base:</strong> muda a forma de agrupar os dígitos usados nos prefixos (2, 4 ou 16).</li>
+          <li><strong>Leaf Set:</strong> quantos vizinhos o nó guarda de cada lado do anel.</li>
+          <li><strong>Semente:</strong> permite repetir a mesma rede. Para obter outros IDs, troque esse número.</li>
+        </ul>
+        <p class="lesson"><strong>Experimente:</strong> comece com 10 ou 20 nós. Com menos pontos fica mais fácil seguir o caminho. Clique em Criar rede para aplicar as alterações.</p>
+      </section>
+      <section class="tutorial-page" hidden>
+        <h3 tabindex="-1">2. Escolha o que procurar</h3>
+        <p>Selecione o <strong>nó de origem</strong>: é o computador que inicia a busca. Você também pode clicar em um ponto no anel.</p>
+        <p>Digite uma <strong>chave</strong>, como <code>A73F</code>, e clique em <strong>Buscar chave</strong>. Ou use <strong>Sortear</strong> para gerar uma chave e calcular a busca.</p>
+        <div class="tutorial-example"><span>Chave procurada: <code>A73F</code></span><span>Origem: um nó da rede</span></div>
+        <p class="lesson"><strong>O que aprender:</strong> a chave não precisa ser o ID de um nó existente. A busca encontra quem seria responsável por ela; nenhum arquivo real é transferido.</p>
+      </section>
+      <section class="tutorial-page" hidden>
+        <h3 tabindex="-1">3. Acompanhe os saltos</h3>
+        <p>Depois da busca, use os botões abaixo do anel:</p>
+        <ul>
+          <li><strong>Próximo salto:</strong> avança uma transmissão por vez.</li>
+          <li><strong>Anterior:</strong> volta um salto para rever a explicação.</li>
+          <li><strong>Animar busca:</strong> percorre o caminho automaticamente. Clique em Pausar para parar.</li>
+          <li><strong>Voltar ao início:</strong> retorna à origem sem alterar a busca.</li>
+        </ul>
+        <p>A linha marcada na tabela acompanha a mensagem. A explicação abaixo dos botões diz por que aquele salto aconteceu.</p>
+        <p class="lesson"><strong>O que aprender:</strong> o salto 0 é a origem. Se ela já for responsável pela chave, a busca termina com zero transmissões.</p>
+      </section>
+      <section class="tutorial-page" hidden>
+        <h3 tabindex="-1">Por que esse caminho foi escolhido?</h3>
+        <p>Um <strong>prefixo</strong> é o começo de um identificador. Veja um exemplo em base 16:</p>
+        <div class="prefix-example"><span>Chave <code><strong>A73</strong>F</code></span><span>Nó <code><strong>A73</strong>B</code></span><span>3 dígitos iniciais iguais</span></div>
+        <ul>
+          <li><strong>Leaf Set:</strong> se a chave está no intervalo dos vizinhos, a mensagem vai para o nó mais próximo dela.</li>
+          <li><strong>Tabela:</strong> fora desse intervalo, o nó busca um contato com mais dígitos iniciais iguais aos da chave.</li>
+          <li><strong>Fallback:</strong> se a entrada da tabela estiver vazia, usa outro contato conhecido, com prefixo pelo menos tão longo e mais perto da chave.</li>
+        </ul>
+        <p class="lesson"><strong>O que aprender:</strong> os prefixos orientam a busca e os vizinhos ajudam na entrega final. O número de dígitos iguais não precisa aumentar em um salto pelo Leaf Set.</p>
+      </section>
+      <section class="tutorial-page" hidden>
+        <h3 tabindex="-1">Agora é sua vez</h3>
+        <ol>
+          <li>Procure a mesma chave a partir de duas origens. Veja como o caminho muda, mas o responsável continua o mesmo.</li>
+          <li>Procure <code>0000</code> ou <code>FFFF</code> para observar a volta do anel.</li>
+          <li>Em <strong>Para explorar mais</strong>, inspecione os contatos da origem ou remova alguns nós e repita a busca.</li>
+        </ol>
+        <p>Quando um nó sai, outro pode assumir a responsabilidade por sua chave.</p>
+        <p class="lesson"><strong>Para explicar no trabalho:</strong> esta é uma simulação do roteamento. As tabelas são montadas com visão de toda a rede e reconstruídas após remoções; não simulamos a entrada de nós ou a detecção distribuída de falhas.</p>
+      </section>
+    </div>
+    <div class="tutorial-footer">
+      <button id="tutorial-back" type="button" class="button">← Voltar</button>
+      <button id="tutorial-next" type="button" class="button primary">Próxima etapa →</button>
+    </div>
+  </dialog>
+</body>
+</html>
