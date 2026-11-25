@@ -11,14 +11,14 @@ Na raiz do repositório, com Python 3.10 ou superior:
 ```bash
 python3 -m venv .venv               # somente se ainda não existir
 source .venv/bin/activate           # Windows: .venv\Scripts\activate
-python -m pip install -r peerToPeer/requirements.txt
-python peerToPeer/app.py
+python -m pip install -r requirements.txt
+python app.py
 ```
 
 Abra **http://127.0.0.1:5000**. Também é possível executar
-`python -m peerToPeer.app` ou escolher outra porta com `--port 5055`.
+`python -m app` ou escolher outra porta com `--port 5055`.
 Se o ambiente existente não tiver pip, execute `python -m ensurepip --upgrade`.
-O `requirements.txt` da raiz também inclui Flask.
+O `requirements.txt` inclui Flask.
 
 Depois de instalar Flask, a apresentação funciona sem internet: CSS, JavaScript,
 fontes do sistema, anel SVG e tutorial são locais. Nenhuma CDN é necessária.
@@ -84,8 +84,8 @@ com IDs reduzidos e as simplificações acima para facilitar a apresentação.
 Somente a biblioteca padrão é necessária:
 
 ```bash
-python3 -m peerToPeer.experiment --samples 300 --seed 42
-python3 -m peerToPeer.experiment --bases 2 4 --sizes 10 100 1000 --json
+python3 experiment.py --samples 300 --seed 42
+python3 experiment.py --bases 2 4 --sizes 10 100 1000 --json
 ```
 
 O comando imprime média, máximo e `log_b(N)` ou retorna os dados em JSON.
@@ -96,10 +96,10 @@ Na raiz:
 
 ```bash
 # Só o núcleo: não precisa instalar Flask.
-python3 -m unittest discover -s peerToPeer/tests -p 'test_simulation.py' -v
+python3 -m unittest discover -s tests -p 'test_simulation.py' -v
 
 # Núcleo + API, com Flask instalado no ambiente.
-python -m unittest discover -s peerToPeer/tests -v
+python -m unittest discover -s tests -v
 ```
 
 A suíte compara mais de 8 mil rotas aleatórias com força bruta e percorre
