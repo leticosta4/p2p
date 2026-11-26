@@ -1,6 +1,6 @@
 import unittest
 
-from peerToPeer.app import create_app
+from app import create_app
 
 
 class ApiTests(unittest.TestCase):

@@ -2,7 +2,7 @@ import random
 import unittest
 from unittest.mock import patch
 
-from peerToPeer.simulation import Network, Node, circular_distance, experiment, shared_prefix
+from simulation import Network, Node, circular_distance, experiment, shared_prefix
 
 
 class SimulationTests(unittest.TestCase):
