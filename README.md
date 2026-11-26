@@ -1,8 +1,24 @@
 # Pastry — laboratório de redes peer-to-peer
 
-Simulador didático com três peças separadas: núcleo Python puro, API Flask e página
-HTML/JS. **O Python decide todos os saltos e calcula todas as métricas.** O navegador
-recebe nós e caminhos prontos, desenha o SVG e percorre a lista na animação.
+Simulador didático do roteamento do **Pastry**, uma das camadas de *routing overlay*
+usadas em sistemas peer-to-peer de terceira geração. Trabalho prático da disciplina de
+Sistemas Distribuídos, baseado no capítulo 10 (Sistemas Peer-to-Peer) de Coulouris
+et al.
+
+**Grupo:** Cibele Sacramento, Letícia Almeida, Samuel de Jesus e Sophia Lima.
+
+**O que a simulação mostra:** cada nó encaminha uma busca usando apenas o que conhece
+localmente, ou seja, sua tabela de roteamento e seu Leaf Set. Não existe índice
+central, ao contrário do Napster. Mesmo assim, a busca chega ao nó responsável pela
+chave em O(log N) saltos.
+
+**O que ela não é:** uma rede de processos distribuídos reais. Todos os nós existem
+dentro de um único processo Python, e algumas partes do protocolo foram simplificadas
+(veja [Limitações e simplificações](#limitações-e-simplificações)).
+
+O projeto tem três peças separadas: núcleo Python puro, API Flask e página HTML/JS.
+**O Python decide todos os saltos e calcula todas as métricas.** O navegador recebe
+nós e caminhos prontos, desenha o SVG e percorre a lista na animação.
 
 ## Executar
 
@@ -23,31 +39,25 @@ O `requirements.txt` inclui Flask.
 Depois de instalar Flask, a apresentação funciona sem internet: CSS, JavaScript,
 fontes do sistema, anel SVG e tutorial são locais. Nenhuma CDN é necessária.
 
-## Usar na apresentação
+## Usando o simulador
 
-1. Clique em **Como usar?** para abrir o tutorial sobreposto de sete etapas. Ele
-   explica o objetivo da simulação, o anel, os controles, os prefixos e a saída de
-   nós. Use **Próxima etapa**, **Voltar** ou as setas do teclado. Feche com o botão
-   **Fechar**, com Esc ou conclua em **Começar a simulação**. A animação pausa ao
-   abrir o tutorial; o restante da página fica sem interação até ele ser fechado.
-2. A página começa com uma rede de 32 nós. Para alterar a quantidade, use o campo
-   numérico ou o slider e clique em **Criar rede**. Base, Leaf Set e semente ficam
-   em **Configurações avançadas**. A semente padrão é 42; altere-a para outros IDs.
-3. Selecione a origem pelo campo ou clicando no anel. Digite uma chave
-   **hexadecimal** entre `0000` e `FFFF` e clique em **Buscar chave**, ou use
-   **Sortear**, que já calcula a nova busca.
-4. Use **Próximo salto**, **Anterior**, **Animar busca** e **Voltar ao início**
-   abaixo do anel. A explicação acompanha o salto exibido. O salto 0 é a origem;
-   a contagem de saltos é o número de transmissões, não de nós visitados.
-5. Veja a coluna **Como chegou**: **Tabela**, **Leaf Set** ou **Fallback**. O prefixo em
-   negrito é medido em dígitos da base selecionada. IDs no anel e no seletor continuam
-   em hexadecimal; a tabela de saltos usa 16 dígitos na base 2, 8 na base 4 ou 4 na base 16.
-6. Em **Para explorar mais**, abra a inspeção para ver a tabela e os vizinhos da
-   origem, ou teste a saída de nós. Se a origem sair, uma origem sobrevivente será
-   selecionada e isso aparecerá no resultado.
-
-O gráfico de crescimento não faz parte da página. O experimento continua
-disponível pelo terminal e pela API para uso separado.
+1. **Como usar?** abre um tutorial de sete etapas sobre o anel, os controles, os
+   prefixos e a saída de nós.
+2. A página começa com 32 nós. Altere a quantidade e clique em **Criar rede**. Base,
+   tamanho do Leaf Set e semente ficam em **Configurações avançadas**. A semente
+   padrão é 42; troque-a para gerar outros IDs.
+3. Escolha a origem (no campo ou clicando no anel) e uma chave hexadecimal entre
+   `0000` e `FFFF`, depois clique em **Buscar chave**. **Sortear** escolhe uma chave
+   e já faz a busca.
+4. Percorra a rota com **Próximo salto**, **Anterior** ou **Animar busca**. O salto 0
+   é a origem, e o total de saltos conta transmissões, não nós visitados.
+5. A coluna **Como chegou** mostra o mecanismo de cada salto. **Tabela** é a célula do
+   próximo dígito da chave. **Leaf Set** é usado quando a chave já está entre os
+   vizinhos do nó. **Fallback** é o caso raro de célula vazia, em que o nó escolhe um
+   contato conhecido mais próximo da chave. O prefixo em negrito é contado em dígitos
+   da base escolhida.
+6. Em **Para explorar mais**, inspecione a tabela e os vizinhos da origem ou remova
+   uma parte dos nós para ver a rede depois da saída deles.
 
 ## Núcleo e decisões de modelagem
 
@@ -58,10 +68,9 @@ disponível pelo terminal e pela API para uso separado.
   Assim, `FFFF` e `0000` têm distância 1.
 - Cada nó guarda os L predecessores e L sucessores no anel. Em redes pequenas,
   as duas listas podem se sobrepor; não incluem o próprio nó.
-- As tabelas são **montadas de forma onisciente**, usando toda a rede. Cada célula
-  aponta para um nó com o prefixo e o próximo dígito correspondentes. Entre
-  candidatos, escolhemos o de menor distância circular ao nó local, com desempate
-  pelo ID. Isso é uma simplificação; não há medição de latência física.
+- Cada célula da tabela aponta para um nó com o prefixo e o próximo dígito
+  correspondentes. Entre os candidatos, escolhemos o de menor distância circular ao
+  nó local, com desempate pelo ID.
 - No roteamento, primeiro é verificado o intervalo circular do Leaf Set. Dentro
   dele, escolhe-se o mais próximo entre os vizinhos e o próprio nó. Fora dele,
   consulta-se a célula do próximo dígito da chave. Se estiver vazia, busca-se nos
@@ -71,13 +80,31 @@ disponível pelo terminal e pela API para uso separado.
   do Leaf Set. **O oráculo global `responsible()` não é usado pelo roteador**;
   existe apenas para conferência por força bruta nos testes.
 - O experimento usa os mesmos IDs e os mesmos pares `(origem, chave)` para cada
-  base em cada N. A semente também fixa as remoções no bônus de churn.
-- Churn é uma remoção em lote seguida de reconstrução onisciente. Não implementa
-  join, manutenção descentralizada, detecção de falhas ou entrega durante falhas.
-  A comparação com inundação não faz parte desta versão.
+  base em cada N. A semente também fixa quais nós são removidos na simulação de
+  saída de nós.
 
-O modelo é inspirado no [Pastry, de Rowstron e Druschel](https://www.microsoft.com/en-us/research/publication/pastry-scalable-distributed-object-location-and-routing-for-large-scale-peer-to-peer-systems/),
-com IDs reduzidos e as simplificações acima para facilitar a apresentação.
+## Limitações e simplificações
+
+O modelo é inspirado no Pastry de Rowstron e Druschel (ver [Referências](#referências)),
+com as simplificações abaixo para manter o foco no roteamento.
+
+- **Simulação em um único processo.** Os nós são estruturas de dados no mesmo
+  programa Python. Não há troca de mensagens por rede, sockets ou concorrência.
+- **Tabelas montadas de forma onisciente.** Na construção da rede, as tabelas e os
+  Leaf Sets são preenchidos com uma visão global de todos os nós. No Pastry real,
+  cada nó monta o próprio estado ao entrar na rede, por meio da mensagem de *join*.
+  O roteamento, por outro lado, usa somente o estado local de cada nó.
+- **Proximidade por ID, não por rede.** O Pastry escolhe as entradas da tabela pela
+  latência física. Aqui o critério é a distância circular entre IDs.
+- **Saída de nós por reconstrução.** A remoção de nós é feita em lote e seguida de uma
+  nova montagem onisciente. Não há detecção de falhas, reparo descentralizado das
+  tabelas nem entrega de mensagens durante as falhas.
+- **Sem armazenamento de dados.** A simulação encontra o nó responsável por uma chave,
+  mas não guarda nem recupera objetos nesse nó (não há `put`/`get` nem replicação).
+- **Espaço de IDs reduzido.** Os IDs têm 16 bits, em vez dos 128 bits do Pastry, e a
+  rede tem até 1.000 nós.
+- **Sem comparação com outros modelos.** Não há comparação com a busca por inundação
+  do Gnutella.
 
 ## Experimento sem servidor ou navegador
 
@@ -88,7 +115,9 @@ python3 experiment.py --samples 300 --seed 42
 python3 experiment.py --bases 2 4 --sizes 10 100 1000 --json
 ```
 
-O comando imprime média, máximo e `log_b(N)` ou retorna os dados em JSON.
+O comando imprime média, máximo e `log_b(N)` ou retorna os dados em JSON. O
+experimento não aparece na página; ele roda pelo terminal ou pela rota
+`POST /api/experiment`.
 
 ## Testes
 
@@ -147,5 +176,13 @@ selecionada, a hexadecimal e a posição normalizada no anel para o desenho.
 N vai de 1 a 1.000, Leaf Set de 1 a 8 por lado na API,
 amostras de 1 a 1.000 por ponto e até 10 tamanhos por experimento. São mantidas
 até 32 redes em memória por processo, com descarte da menos recentemente usada.
-Reiniciar o servidor remove esse estado. O programa é uma simulação local, não
-uma rede de processos distribuídos reais.
+Reiniciar o servidor remove esse estado.
+
+## Referências
+
+- COULOURIS, G.; DOLLIMORE, J.; KINDBERG, T.; BLAIR, G. *Sistemas Distribuídos:
+  Conceitos e Projeto*. 5. ed. Porto Alegre: Bookman, 2013. Cap. 10: Sistemas
+  Peer-to-Peer.
+- ROWSTRON, A.; DRUSCHEL, P. [Pastry: Scalable, decentralized object location and
+  routing for large-scale peer-to-peer systems](https://www.microsoft.com/en-us/research/publication/pastry-scalable-distributed-object-location-and-routing-for-large-scale-peer-to-peer-systems/).
+  In: *Middleware 2001*, LNCS 2218, p. 329–350. Springer, 2001.
