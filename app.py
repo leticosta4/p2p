@@ -1,4 +1,4 @@
-"""API fina e página local. Execute: python peerToPeer/app.py."""
+"""API fina e página local. Execute: python app.py."""
 
 import argparse
 from collections import OrderedDict

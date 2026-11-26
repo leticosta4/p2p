@@ -1,4 +1,4 @@
-"""Execute: python -m peerToPeer.experiment --samples 300 --seed 42."""
+"""Execute: python experiment.py --samples 300 --seed 42."""
 
 import argparse
 import json
