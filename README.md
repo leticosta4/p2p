@@ -10,7 +10,8 @@ et al.
 **O que a simulação mostra:** cada nó encaminha uma busca usando apenas o que conhece
 localmente, ou seja, sua tabela de roteamento e seu Leaf Set. Não existe índice
 central, ao contrário do Napster. Mesmo assim, a busca chega ao nó responsável pela
-chave em O(log N) saltos.
+chave em O(log N) saltos. Um experimento separado compara esse custo com a busca
+por inundação das redes não estruturadas, como o Gnutella.
 
 **O que ela não é:** uma rede de processos distribuídos reais. Todos os nós existem
 dentro de um único processo Python, e algumas partes do protocolo foram simplificadas
@@ -103,8 +104,9 @@ com as simplificações abaixo para manter o foco no roteamento.
   mas não guarda nem recupera objetos nesse nó (não há `put`/`get` nem replicação).
 - **Espaço de IDs reduzido.** Os IDs têm 16 bits, em vez dos 128 bits do Pastry, e a
   rede tem até 1.000 nós.
-- **Sem comparação com outros modelos.** Não há comparação com a busca por inundação
-  do Gnutella.
+- **Inundação simplificada.** A rede não estruturada usada na comparação é um grafo
+  aleatório com grau aproximado fixo, sem supernós, sem entrada e saída de nós e sem
+  respostas voltando pelo caminho. Só as mensagens de busca são contadas.
 
 ## Experimento sem servidor ou navegador
 
@@ -119,13 +121,58 @@ O comando imprime média, máximo e `log_b(N)` ou retorna os dados em JSON. O
 experimento não aparece na página; ele roda pelo terminal ou pela rota
 `POST /api/experiment`.
 
+## Comparação com busca por inundação
+
+Redes não estruturadas, como o Gnutella, não têm regra para saber onde está cada
+objeto. A busca é repassada a todos os vizinhos, que a repassam aos vizinhos deles,
+até o TTL acabar. O Pastry segue uma rota determinada pelos IDs. A comparação mede
+esse contraste:
+
+```bash
+python3 experiment.py --inundacao --sizes 10 100 1000
+python3 experiment.py --inundacao --ttls 2 4 7 --grau 4 --json
+```
+
+Como a comparação funciona (`flooding.py`):
+
+- Usa os mesmos nós e as mesmas buscas `(origem, chave)` nas duas redes. O alvo da
+  inundação é o nó que o Pastry considera responsável pela chave, como se o objeto
+  estivesse guardado nele.
+- A rede não estruturada é um grafo aleatório conexo, com cerca de `--grau` vizinhos
+  por nó (padrão 4) e sem relação com os IDs.
+- Cada nó repassa a busca uma única vez a todos os vizinhos, menos ao remetente, e
+  descarta cópias repetidas. A inundação não para quando o alvo é encontrado, porque
+  nenhum nó sabe que outro já respondeu.
+- **Mensagens** contam todos os envios, inclusive os que chegam a nós que já tinham
+  visto a busca. No Pastry, cada salto é uma mensagem.
+
+Resultado com a semente 42 e 300 buscas por ponto (Pastry em base 16):
+
+| N | Método | Mensagens por busca | Buscas que encontram o alvo |
+| --- | --- | ---: | ---: |
+| 100 | Pastry | 1,8 | 100% |
+| 100 | Inundação, TTL 2 | 25,4 | 23% |
+| 100 | Inundação, TTL 4 | 274,4 | 98% |
+| 100 | Inundação, TTL 7 | 389,0 | 100% |
+| 1000 | Pastry | 2,6 | 100% |
+| 1000 | Inundação, TTL 2 | 26,4 | 4% |
+| 1000 | Inundação, TTL 4 | 469,3 | 35% |
+| 1000 | Inundação, TTL 7 | 3957,2 | 100% |
+
+A inundação tem um dilema: com TTL baixo, gasta menos mensagens, mas muitas buscas não
+alcançam o alvo; com TTL alto, encontra o alvo, mas a busca percorre a rede inteira.
+O Pastry usa poucas mensagens e sempre chega ao responsável, desde que suas tabelas
+estejam corretas. Esse é o custo da estrutura: manter as tabelas quando há churn,
+o que esta simulação não modela (veja [Limitações e simplificações](#limitações-e-simplificações)).
+
 ## Testes
 
 Na raiz:
 
 ```bash
-# Só o núcleo: não precisa instalar Flask.
+# Só o núcleo e a inundação: não precisa instalar Flask.
 python3 -m unittest discover -s tests -p 'test_simulation.py' -v
+python3 -m unittest discover -s tests -p 'test_flooding.py' -v
 
 # Núcleo + API, com Flask instalado no ambiente.
 python -m unittest discover -s tests -v
@@ -139,6 +186,10 @@ verificação empírica da simulação, não uma prova de limite universal.
 O oráculo é substituído por uma função que falha durante as buscas dos testes,
 para impedir que o roteador dependa acidentalmente dele.
 
+Os testes da inundação conferem que o grafo é conexo, simétrico e reproduzível, que
+os nós alcançados coincidem com uma busca em largura limitada pelo TTL e que a contagem
+de mensagens está correta em grafos pequenos conhecidos.
+
 Os testes da API cobrem parâmetros inválidos, erros JSON, isolamento de redes,
 expiração, inspeção, sorteio reproduzível, experimento e busca após remoções,
 usando o [cliente de testes do Flask](https://flask.palletsprojects.com/en/stable/testing/).
@@ -148,12 +199,13 @@ usando o [cliente de testes do Flask](https://flask.palletsprojects.com/en/stabl
 | Arquivo | Responsabilidade |
 | --- | --- |
 | `simulation.py` | IDs, distância, tabelas, Leaf Set, roteamento, churn e experimento |
-| `experiment.py` | Interface de linha de comando do experimento |
+| `flooding.py` | Rede não estruturada, busca por inundação com TTL e comparação com o Pastry |
+| `experiment.py` | Interface de linha de comando do experimento e da comparação |
 | `app.py` | Validação HTTP, registro de redes e entrega da página |
 | `templates/index.html` | Página única em português |
 | `static/app.js` | Controles, requisições, SVG e reprodução da rota recebida |
 | `static/style.css` | Layout responsivo e estilos |
-| `tests/` | Conferência do núcleo e da API |
+| `tests/` | Conferência do núcleo, da inundação e da API |
 
 ## API
 
@@ -180,9 +232,8 @@ Reiniciar o servidor remove esse estado.
 
 ## Referências
 
-- COULOURIS, G.; DOLLIMORE, J.; KINDBERG, T.; BLAIR, G. *Sistemas Distribuídos:
-  Conceitos e Projeto*. 5. ed. Porto Alegre: Bookman, 2013. Cap. 10: Sistemas
-  Peer-to-Peer.
+- COULOURIS, G.; DOLLIMORE, J.; KINDBERG, T.; BLAIR, G. *Distributed Systems:
+  Concepts and Design*. 5. ed. Addison-Wesley, 2012. Cap. 10: Peer-to-peer systems.
 - ROWSTRON, A.; DRUSCHEL, P. [Pastry: Scalable, decentralized object location and
   routing for large-scale peer-to-peer systems](https://www.microsoft.com/en-us/research/publication/pastry-scalable-distributed-object-location-and-routing-for-large-scale-peer-to-peer-systems/).
   In: *Middleware 2001*, LNCS 2218, p. 329–350. Springer, 2001.
